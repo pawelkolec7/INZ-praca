@@ -373,7 +373,7 @@ class SignalService:
         if not self.norm_stats:
             self.norm_stats = self._load_norm_stats()
 
-        X_last, bar_idx = features_last_bar(
+        X_last, bar_idx, sr_wys, sr_szer = features_last_bar(
             df_prices,
             MIN_ZP,
             ILE_ZZ,
@@ -393,7 +393,12 @@ class SignalService:
         with torch.no_grad():
             prob = torch.sigmoid(self.model(x)).item()
         recommendation = "buy" if prob >= 0.5 else "sell"
-        return PredictionResponse(probability=prob, recommendation=recommendation)
+        return PredictionResponse(
+            probability=prob,
+            recommendation=recommendation,
+            avg_pivot_height_pips=sr_wys,
+            avg_pivot_width_bars=sr_szer,
+        )
 
     def _df_from_candles(self, candles: List[Candle]) -> pd.DataFrame:
         if len(candles) < 2:

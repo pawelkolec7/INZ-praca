@@ -19,6 +19,8 @@ import pandas as pd
 from collections import deque
 from pathlib import Path
 
+N_PIVOTOW_SR = 8
+
 # ================== Wczytanie CSV z MT5 (EA) ====================
 def load_mt5_csv(path: Path) -> pd.DataFrame:
     """
@@ -122,8 +124,26 @@ def etykieta(sw, df_zz_all, O:pd.Series):
     label = 1.0 if pivot_price > next_open else 0.0
     return label, pivot_bar
 
+# ============ NOWA FUNKCJA: średnie pivotów dla świecy =================
+def srednie_pivotow_dla_sw(df_zz_all, sw_val, n_pivotow):
+    piv_bars   = df_zz_all["bar"].to_numpy()
+    piv_prices = df_zz_all["price"].to_numpy()
+    price_diffs = np.abs(np.diff(piv_prices))
+    bar_diffs   = np.diff(piv_bars)
+
+    j = int(np.searchsorted(piv_bars, sw_val, side='left'))
+    if j >= 2:
+        start = max(0, j - n_pivotow)
+        pd_slice = price_diffs[start:j]
+        bd_slice = bar_diffs[start:j]
+        sr_w = round(np.mean(pd_slice)*10000)
+        sr_sz = int(np.mean(bd_slice))
+        if len(pd_slice) >= 1 and len(bd_slice) >= 1:
+            return sr_w, sr_sz
+    return None, None
+
 # ============== Budowa cech (zakres lub 1 wiersz) ==============
-def oblicz_dane(df_swieczki, df_zz_all, od, do, dl_zz, liczba_sw, ile_zz, min_zp, backstep):
+def oblicz_dane(df_swieczki, df_zz_all, od, do, dl_zz, liczba_sw, ile_zz, min_zp, backstep, n_pivotow=None):
     H = df_swieczki["H"].values
     L = df_swieczki["L"].values
     C = df_swieczki["C"]
@@ -137,6 +157,9 @@ def oblicz_dane(df_swieczki, df_zz_all, od, do, dl_zz, liczba_sw, ile_zz, min_zp
         if flag == 1 and last_row is not None:
             piv_deque.append(last_row)
         last_row, last_count = new_row, new_count
+
+        if n_pivotow is not None and n_pivotow > 0:
+            sr_wys, sr_szer = srednie_pivotow_dla_sw(df_zz_all, sw, n_pivotow)
 
         all_dyn = list(piv_deque)
         if last_row is not None:
@@ -321,15 +344,26 @@ def normalizacja2(W:pd.DataFrame, O:pd.Series, dl_zz:int, liczba_sw:int, stats=N
 def features_last_bar(df_swieczki, MIN_ZP, ILE_ZZ, BACKSTEP, DL_ZZ, LICZBA_SW, norm_stats):
     N = len(df_swieczki)
     if N < 2:
-        return None, None
+        return None, None, None, None
 
     # 1) budujemy pipeline na zakresie 1..N-1 (bo potrzebujemy O_next dla sw)
     od, do = 1, N - 1
 
     df_ZZ = ZZ_caly(df_swieczki, ILE_ZZ, MIN_ZP, BACKSTEP)
-    df_in, df_out, first_bar = oblicz_dane(df_swieczki, df_ZZ, od, do, DL_ZZ, LICZBA_SW, ILE_ZZ, MIN_ZP, BACKSTEP)
+    df_in, df_out, first_bar = oblicz_dane(
+        df_swieczki,
+        df_ZZ,
+        od,
+        do,
+        DL_ZZ,
+        LICZBA_SW,
+        ILE_ZZ,
+        MIN_ZP,
+        BACKSTEP,
+        n_pivotow=N_PIVOTOW_SR,
+    )
     if len(df_in) == 0:
-        return None, None
+        return None, None, None, None
 
     df_ind = oblicz_wskazniki(df_swieczki, od, do, len(df_in))
     df_all = polacz_dane(df_in, df_ind)
@@ -341,7 +375,7 @@ def features_last_bar(df_swieczki, MIN_ZP, ILE_ZZ, BACKSTEP, DL_ZZ, LICZBA_SW, n
     O_next_series = df_swieczki["O"].shift(-1)  # O_next istnieje tylko do N-1
     ready_idx = df_all.index.intersection(O_next_series.dropna().index)
     if len(ready_idx) == 0:
-        return None, None
+        return None, None, None, None
 
     # 3) idziemy od końca i bierzemy pierwszy „gotowy”
     for bar_idx in sorted(ready_idx, reverse=True):
@@ -349,9 +383,10 @@ def features_last_bar(df_swieczki, MIN_ZP, ILE_ZZ, BACKSTEP, DL_ZZ, LICZBA_SW, n
         O_next = O_next_series.loc[[bar_idx]]
         X_norm, _ = normalizacja2(X_raw, O_next, DL_ZZ, LICZBA_SW, stats=norm_stats)
         if not X_norm.isna().any().any():
-            return X_norm.to_numpy(np.float32), int(bar_idx)
+            sr_wys, sr_szer = srednie_pivotow_dla_sw(df_ZZ, bar_idx, N_PIVOTOW_SR)
+            return X_norm.to_numpy(np.float32), int(bar_idx), sr_wys, sr_szer
 
-    return None, None
+    return None, None, None, None
 
 
 
