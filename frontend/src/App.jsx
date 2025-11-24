@@ -50,7 +50,9 @@ function App() {
   const [history, setHistory] = useState([])
   const [historyError, setHistoryError] = useState('')
   const [loadingHistory, setLoadingHistory] = useState(true)
-  const [historyLimit, setHistoryLimit] = useState(2000)
+
+  const [historyLimit] = useState(8000)
+
   const DEFAULT_SOURCE = 'ohlc_EURUSD_H1.csv'
   const [sourceName, setSourceName] = useState(DEFAULT_SOURCE)
 
@@ -62,20 +64,15 @@ function App() {
   const [loadingSignal, setLoadingSignal] = useState(false)
   const [selectedCandle, setSelectedCandle] = useState(null)
 
-  // --- Stany dla konfiguracji ZigZag ---
-  const [zigzagDepth, setZigzagDepth] = useState(23)
-  const [zigzagDeviation, setZigzagDeviation] = useState(0.00554)
-  // ZMIENIONE: Wartość początkowa ustawiona na 4, aby pasowała do domyślnej w main.py
-  const [zigzagBackstep, setZigzagBackstep] = useState(4)
+  const [zigzagDepth] = useState(23)
+  const [zigzagDeviation] = useState(0.00554)
+  const [zigzagBackstep] = useState(4)
   const [loadingZigzag, setLoadingZigzag] = useState(false)
 
-
-  // ZigZag - dane z backendu
   const [zigzagHighs, setZigzagHighs] = useState([])
   const [zigzagLows, setZigzagLows] = useState([])
   const [zigzagCombined, setZigzagCombined] = useState([])
 
-  // Domyślnie włączone wskaźniki - PUSTY ZESTAW (NIC NIE ZAZNACZONE)
   const [activeInds, setActiveInds] = useState(new Set())
 
   const toggleIndicator = (id) => {
@@ -85,16 +82,11 @@ function App() {
     setActiveInds(newSet)
   }
 
-  // Zaktualizowana funkcja fetchZigzag
-  const fetchZigzag = async (depth = zigzagDepth, deviation = zigzagDeviation, backstep = zigzagBackstep) => {
+  const fetchZigzag = async (depth, deviation, backstep) => {
     setLoadingZigzag(true)
     try {
       const res = await axios.get(`${API_URL}/zigzag-test`, {
-        params: {
-          depth: depth,
-          deviation: deviation,
-          backstep: backstep // PARAMETR JEST POPRAWNIE WYSYŁANY
-        }
+        params: { depth, deviation, backstep }
       })
 
       const highs = res.data.pivot_highs || []
@@ -115,21 +107,17 @@ function App() {
     }
   }
 
-  // Używamy tego hooka, aby przeliczać ZigZag, gdy zmieniają się parametry
   useEffect(() => {
-    // Unikamy przeliczania przy pierwszej renderowaniu, gdy historia jeszcze nie jest załadowana
     if (history.length === 0) return
 
     const delayDebounceFn = setTimeout(() => {
       fetchZigzag(zigzagDepth, zigzagDeviation, zigzagBackstep)
-    }, 500) // Debounce, aby nie spamować API przy szybkich zmianach
+    }, 500)
 
     return () => clearTimeout(delayDebounceFn)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [zigzagDepth, zigzagDeviation, zigzagBackstep, history.length])
 
-
-  // Stany dla retraining
   const [retrainLoading, setRetrainLoading] = useState(false)
   const [retrainLogs, setRetrainLogs] = useState('')
   const [retrainSuccess, setRetrainSuccess] = useState(null)
@@ -140,7 +128,6 @@ function App() {
   const chartInstance = useRef(null)
   const candleSeriesRef = useRef(null)
 
-  // Mapa referencji do serii wskaźników { "SMA20": ISeriesApi, ... }
   const indicatorSeriesMap = useRef({})
 
   const chartData = useMemo(() => buildChartData(history), [history])
@@ -154,9 +141,6 @@ function App() {
     return map
   }, [chartData, history])
 
-  // --- ZigZag -> format lightweight-charts ---
-
-  // linia ZigZag (jeden stream)
   const zigzagLineData = useMemo(() => {
     return zigzagCombined.map(p => ({
       time: Math.floor(Date.parse(p.time) / 1000),
@@ -164,23 +148,17 @@ function App() {
     }))
   }, [zigzagCombined])
 
-  // punkty highs
   const zigzagHighData = useMemo(() => {
     return zigzagHighs.map(p => ({
       time: Math.floor(Date.parse(p.time) / 1000),
-      value: p.price,
-      // Używamy znacznika, aby wyświetlić kropkę
-      mark: { position: 'aboveBar', color: '#00ff00', size: 5, shape: 'circle' }
+      value: p.price
     }))
   }, [zigzagHighs])
 
-  // punkty lows
   const zigzagLowData = useMemo(() => {
     return zigzagLows.map(p => ({
       time: Math.floor(Date.parse(p.time) / 1000),
-      value: p.price,
-      // Używamy znacznika, aby wyświetlić kropkę
-      mark: { position: 'belowBar', color: '#ff4444', size: 5, shape: 'circle' }
+      value: p.price
     }))
   }, [zigzagLows])
 
@@ -207,10 +185,6 @@ function App() {
     try {
       const res = await axios.get(`${API_URL}/history`, { params: { limit } })
       setHistory(res.data.candles)
-
-      // Nie robimy fetchZigzag tutaj, bo zrobi to useEffect po załadowaniu historii
-      // (ponieważ history.length się zmienia)
-
       setLastFetchTime(new Date())
       setSignalError('')
       setSourceName(DEFAULT_SOURCE)
@@ -224,20 +198,18 @@ function App() {
 
   useEffect(() => {
     fetchHistory(historyLimit)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     if (!historyLimit) return
     fetchHistory(historyLimit)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyLimit])
 
+  // Funkcja wywoływana przez przycisk - identyczna jak w starym kodzie
   const reloadCurrentSource = () => fetchHistory(historyLimit)
 
   const handleRetrain = async () => {
-    // Zastąpienie window.confirm własnym UI/console.log, ponieważ alerty są zabronione w iframe.
-    console.log("Potwierdź: Czy na pewno chcesz uruchomić douczanie modelu? (TAK/NIE - Działanie rozpoczęte)")
+    console.log("Potwierdź: Czy na pewno chcesz uruchomić douczanie modelu?")
 
     setRetrainLoading(true)
     setRetrainLogs("")
@@ -268,7 +240,44 @@ function App() {
     }
   }
 
-  // INICJALIZACJA WYKRESU (TWORZYMY WSZYSTKIE SERIE RAZ)
+  // ----------------------------------------
+  // ✅ WIDOK / ZOOM / SCROLL
+  // ----------------------------------------
+
+  // helper: ustaw zakres po ostatnich N świecach (po czasach, nie indeksach)
+  const setLastNBarsVisible = (n) => {
+    if (!chartInstance.current || chartData.length === 0) return
+    const len = chartData.length
+    const fromIdx = Math.max(0, len - n)
+    const fromTime = chartData[fromIdx].time
+    const toTime = chartData[len - 1].time
+    chartInstance.current.timeScale().setVisibleRange({ from: fromTime, to: toTime })
+  }
+
+  // Funkcja resetująca sam widok (pozostawiona pomocniczo, ale nieużywana pod głównym przyciskiem)
+  const resetChartView = () => {
+    if (!chartInstance.current) return
+    chartInstance.current.applyOptions({
+      timeScale: {
+        rightOffset: 0,
+        barSpacing: 6,
+        fixLeftEdge: false,
+        fixRightEdge: false,
+        lockVisibleTimeRangeOnResize: false,
+        rightBarStaysOnScroll: false,
+      }
+    })
+    chartInstance.current.timeScale().fitContent()
+  }
+
+  const zoomLast50 = () => setLastNBarsVisible(50)
+
+  const scrollToLatest = () => {
+    if (!chartInstance.current) return
+    chartInstance.current.timeScale().scrollToRealTime()
+  }
+
+  // INICJALIZACJA WYKRESU
   useEffect(() => {
     if (!isChartLibLoaded || !chartContainer.current) return
     if (!window.LightweightCharts) return
@@ -284,13 +293,16 @@ function App() {
         vertLines: { color: 'rgba(255,255,255,0.05)' },
         horzLines: { color: 'rgba(255,255,255,0.05)' },
       },
-      timeScale: { borderColor: 'rgba(255,255,255,0.12)' },
+      timeScale: {
+        borderColor: 'rgba(255,255,255,0.12)',
+        rightOffset: 0,
+        barSpacing: 6,
+      },
       rightPriceScale: { borderColor: 'rgba(255,255,255,0.12)' },
       width: chartContainer.current.clientWidth,
       height: 420,
     })
 
-    // 1. Seria świecowa
     candleSeriesRef.current = chart.addCandlestickSeries({
       upColor: '#22c55e',
       downColor: '#ef4444',
@@ -298,13 +310,13 @@ function App() {
       wickUpColor: '#22c55e',
       wickDownColor: '#ef4444',
     })
+
+    // startowy widok
     chart.timeScale().fitContent()
 
-    // 2. Tworzymy WSZYSTKIE serie wskaźników od razu, ale ukryte
     indicatorSeriesMap.current = {}
 
     INDICATOR_OPTS.forEach(opt => {
-      // Linia ZigZag
       if (opt.id === 'ZZ_LINE') {
         const zzLine = chart.addLineSeries({
           color: opt.color,
@@ -317,23 +329,19 @@ function App() {
         return
       }
 
-      // Punkty ZigZag (HIGH/LOW) - musimy użyć markers dla punktów
       if (opt.isPointSeries) {
-        // Tworzymy serię świecową/liniową, ale używamy jej tylko do wyświetlania markers
         const pointSeries = chart.addLineSeries({
           color: opt.color,
-          lineWidth: 0, // Ukrywamy linię
+          lineWidth: 0,
           priceLineVisible: false,
           lastValueVisible: false,
-          crosshairMarkerVisible: false, // Ukrywamy domyślny marker
+          crosshairMarkerVisible: false,
           visible: false
         })
         indicatorSeriesMap.current[opt.id] = pointSeries
         return
       }
 
-
-      // standardowe linie SMA/EMA/BB itd.
       const series = chart.addLineSeries({
         color: opt.color,
         lineWidth: 1,
@@ -363,16 +371,16 @@ function App() {
     }
   }, [isChartLibLoaded])
 
-  // AKTUALIZACJA DANYCH I WIDOCZNOŚCI (BEZ USUWANIA SERII)
   useEffect(() => {
     if (!chartInstance.current || !candleSeriesRef.current || !chartData.length) return
 
-    // 1. Aktualizuj świece
     candleSeriesRef.current.setData(chartData)
 
-    // 2. Aktualizuj zwykłe wskaźniki (pomijamy ZigZag tutaj)
+    // Opcjonalnie: Jeśli chcesz, aby po załadowaniu nowych danych wykres też się resetował wizualnie,
+    // odkomentuj poniższą linię (tak było domyślnie w bibliotece w starym kodzie):
+    // chartInstance.current.timeScale().fitContent()
+
     INDICATOR_OPTS.forEach(opt => {
-      // Pomińmy ZigZag
       if (['ZZ_LINE', 'ZZ_HIGH_PTS', 'ZZ_LOW_PTS'].includes(opt.id)) return
 
       const series = indicatorSeriesMap.current[opt.id]
@@ -387,7 +395,6 @@ function App() {
     })
   }, [chartData, activeInds])
 
-  // --- UPDATE ZIGZAG (linia + punkty) ---
   useEffect(() => {
     if (!chartInstance.current) return
 
@@ -395,7 +402,6 @@ function App() {
     const zzHighPts = indicatorSeriesMap.current["ZZ_HIGH_PTS"]
     const zzLowPts = indicatorSeriesMap.current["ZZ_LOW_PTS"]
 
-    // Zmieniono logikę widoczności na podstawie nowych, pojedynczych ID
     const isLineVisible = activeInds.has("ZZ_LINE")
     const isHighPtsVisible = activeInds.has("ZZ_HIGH_PTS")
     const isLowPtsVisible = activeInds.has("ZZ_LOW_PTS")
@@ -405,33 +411,16 @@ function App() {
       zzLine.applyOptions({ visible: isLineVisible })
     }
 
-    // Używamy markers w serii świecowej dla lepszej widoczności punktów
-    if (zzHighPts && zzLowPts && candleSeriesRef.current) {
-      const markers = []
-      if (isHighPtsVisible) markers.push(...zigzagHighData)
-      if (isLowPtsVisible) markers.push(...zigzagLowData)
-
-      // Ponieważ Lightweight Charts nie obsługuje bezpośrednio markers na LineSeries,
-      // użyjemy ich na głównej serii świecowej, co jest standardową praktyką.
-      candleSeriesRef.current.setMarkers(markers.map(p => ({
-        time: p.time,
-        position: p.mark.position,
-        color: p.mark.color,
-        shape: p.mark.shape,
-        size: p.mark.size,
-        text: '', // Bez tekstu dla czystego punktu
-        id: p.time + (p.mark.position === 'aboveBar' ? 'h' : 'l')
-      })))
-
-      // Ukrywamy/pokazujemy puste serie linii, aby wskaźnik na panelu działał
-      // Nie mają one danych, ale pozwalają na włączanie/wyłączanie w menu
+    if (zzHighPts) {
       zzHighPts.setData(isHighPtsVisible ? zigzagHighData : [])
-      zzLowPts.setData(isLowPtsVisible ? zigzagLowData : [])
       zzHighPts.applyOptions({ visible: isHighPtsVisible })
+    }
+
+    if (zzLowPts) {
+      zzLowPts.setData(isLowPtsVisible ? zigzagLowData : [])
       zzLowPts.applyOptions({ visible: isLowPtsVisible })
     }
   }, [zigzagLineData, zigzagHighData, zigzagLowData, activeInds])
-
 
   useEffect(() => {
     if (!chartInstance.current) return
@@ -448,7 +437,7 @@ function App() {
       const { point, raw } = entry
       const readableTime = raw?.time || new Date(point.time * 1000).toISOString()
       setSelectedCandle({
-        time: readableTime.replace('T', ' '),
+        time: readableTime.replace('T', ' ').replace(/\+.*/, ''),
         open: point.open,
         high: point.high,
         low: point.low,
@@ -542,7 +531,6 @@ function App() {
         </p>
       </section>
 
-      {/* SEKCJA DOUCZANIA MODELU */}
       <section className="card">
         <div className="card-header">
           <div>
@@ -597,62 +585,6 @@ function App() {
         </p>
       </section>
 
-      {/* NOWY PANEL KONFIGURACJI ZIGZAG */}
-      <section className="card">
-        <div className="card-header">
-          <div>
-            <p className="eyebrow">Konfiguracja wskaźnika</p>
-            <h2>ZigZag Parameters</h2>
-          </div>
-          <div className="pill">{loadingZigzag ? 'Przeliczanie...' : 'Gotowy'}</div>
-        </div>
-
-        <div className="grid three-col">
-          <div className="slider">
-            <label htmlFor="zz-depth">Depth (Głębokość - $P$)</label>
-            <input
-              id="zz-depth"
-              type="number"
-              min="1"
-              step="1"
-              value={zigzagDepth}
-              onChange={(e) => setZigzagDepth(Number(e.target.value))}
-              disabled={loadingZigzag || loadingHistory}
-            />
-            <p className="hint">Minimalna liczba świec, w której pivot musi być max/min (okno $2 \cdot P + 1$).</p>
-          </div>
-
-          <div className="slider">
-            <label htmlFor="zz-deviation">Deviation (Dewiacja - $K$)</label>
-            <input
-              id="zz-deviation"
-              type="number"
-              min="0.00001"
-              step="0.00001"
-              value={zigzagDeviation}
-              onChange={(e) => setZigzagDeviation(Number(e.target.value))}
-              disabled={loadingZigzag || loadingHistory}
-            />
-            <p className="hint">Minimalna odległość cenowa (High-Low) od poprzedniego pivota, aby uznać nowy.</p>
-          </div>
-
-          <div className="slider">
-            <label htmlFor="zz-backstep">Backstep (Krok wstecz - $B$)</label>
-            <input
-              id="zz-backstep"
-              type="number"
-              min="1"
-              step="1"
-              value={zigzagBackstep}
-              onChange={(e) => setZigzagBackstep(Number(e.target.value))}
-              disabled={loadingZigzag || loadingHistory}
-            />
-            <p className="hint">Minimalna liczba świec między dwoma pivotami. Nie używane w obecnej implementacji backendu, ale przygotowane dla rozszerzeń.</p>
-          </div>
-        </div>
-      </section>
-
-
       <section className="card">
         <div className="card-header">
           <div>
@@ -662,7 +594,7 @@ function App() {
           <div className="pill">{loadingHistory ? 'Ładowanie...' : `${history.length} świec`}</div>
         </div>
 
-        {/* PANEL KONFIGURACJI WSKAŹNIKÓW - POBIERA Z INDICATOR_OPTS */}
+        {/* PANEL KONFIGURACJI WSKAŹNIKÓW */}
         <div style={{ margin: '15px 0', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
           {INDICATOR_OPTS.map(opt => (
             <label
@@ -723,33 +655,24 @@ function App() {
                 }
               />
 
-              {selectedCandle && selectedCandle.rsi && (
-                <StatTile
-                  label="RSI (14)"
-                  value={selectedCandle.rsi.toFixed(2)}
-                  hint="Oscylator"
-                />
-              )}
-
               <StatTile label="Źródło" value={<span className="source-value">{sourceName}</span>} />
             </div>
 
-            <div className="controls inline">
-              <div className="slider compact">
-                <span>Zasięg danych</span>
-                <select
-                  value={historyLimit}
-                  onChange={(e) => setHistoryLimit(Number(e.target.value))}
-                  disabled={loadingHistory}
-                >
-                  <option value={2000}>2k świec</option>
-                  <option value={5000}>5k świec</option>
-                  <option value={10000}>10k świec</option>
-                </select>
-              </div>
+            {/* ✅ PRZYCISKI – ZMIENIONE ZACHOWANIE PRZYCISKU RESET */}
+            <div
+              className="controls inline"
+              style={{ justifyContent: "flex-start", gap: "12px", flexWrap: "wrap" }}
+            >
+              <div className="pill">Zasięg: 8000 świec</div>
+
+              {/* 👇👇👇 ZMIANA TUTAJ 👇👇👇
+                  Zamiast resetChartView używamy reloadCurrentSource + stan ładowania */}
               <button onClick={reloadCurrentSource} disabled={loadingHistory}>
-                {loadingHistory ? 'Ładowanie...' : 'Zresretuj widok wykresu'}
+                {loadingHistory ? 'Ładowanie...' : 'Aktualizuj wykres'}
               </button>
+
+              <button onClick={zoomLast50}>Ostatnie 50 świec</button>
+              <button onClick={scrollToLatest}>Ostatnia świeca →</button>
             </div>
 
             {selectedCandle && (
@@ -778,31 +701,6 @@ function App() {
                 </div>
               </div>
             )}
-
-            {/* Debug - Uaktualnione o nowe parametry ZZ */}
-            <div style={{ background: "#111", padding: 15, marginTop: 20 }}>
-              <h3 style={{ color: "#0af" }}>ZigZag — Debug</h3>
-              <p style={{ color: "#aaf" }}>
-                Parametry: Depth={zigzagDepth}, Deviation={zigzagDeviation}, Backstep={zigzagBackstep}
-              </p>
-              <p style={{ color: "#aaf" }}>
-                Highs: {zigzagHighs.length} | Lows: {zigzagLows.length} | Combined: {zigzagCombined.length}
-              </p>
-              <pre style={{
-                color: "#ccc",
-                maxHeight: 300,
-                overflowY: "auto",
-                background: "#000",
-                padding: 10,
-                border: "1px solid #333"
-              }}>
-                {JSON.stringify(
-                  { zigzag: zigzagCombined.slice(0, 20) },
-                  null,
-                  2
-                )}
-              </pre>
-            </div>
           </>
         )}
       </section>
