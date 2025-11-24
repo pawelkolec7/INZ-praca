@@ -64,7 +64,7 @@ if __name__ == "__main__":
                 if st.st_size != last_size or st.st_mtime != last_mtime:
                     time.sleep(1.0)  # debounce na czas zapisu EA
                     df = load_mt5_csv(MT5_CSV)
-                    X_last, bar_idx = features_last_bar(df, MIN_ZP, ILE_ZZ, BACKSTEP, DL_ZZ, LICZBA_SW, norm_stats)
+                    X_last, bar_idx, sr_wys, sr_szer = features_last_bar(df, MIN_ZP, ILE_ZZ, BACKSTEP, DL_ZZ, LICZBA_SW, norm_stats)
                     if X_last is not None:
                         # Jeśli model jeszcze nie powstał — zbuduj z właściwym input_dim
                         if model is None:
@@ -74,7 +74,10 @@ if __name__ == "__main__":
                             model.eval()
 
                         sig, prob = predict_one(model, X_last)
-                        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] bar={bar_idx}  SYGNAŁ={sig}  Prawdopodobieństwo={prob:.3f}")
+                        print(
+                            f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] bar={bar_idx}  SYGNAŁ={sig}  "
+                            f"Prawdopodobieństwo={prob:.3f}  Śr. wysokość={sr_wys}  Śr. szerokość={sr_szer}"
+                        )
                     else:
                         print("Brak kompletnego wiersza do predykcji.")
                     last_size, last_mtime = st.st_size, st.st_mtime

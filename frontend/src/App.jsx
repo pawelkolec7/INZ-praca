@@ -60,6 +60,8 @@ function App() {
   const [now, setNow] = useState(new Date())
 
   const [probability, setProbability] = useState(null)
+  const [avgPivotHeight, setAvgPivotHeight] = useState(null)
+  const [avgPivotWidth, setAvgPivotWidth] = useState(null)
   const [signalError, setSignalError] = useState('')
   const [loadingSignal, setLoadingSignal] = useState(false)
   const [selectedCandle, setSelectedCandle] = useState(null)
@@ -455,12 +457,18 @@ function App() {
   const requestSignal = async () => {
     setSignalError('')
     setLoadingSignal(true)
+    setAvgPivotHeight(null)
+    setAvgPivotWidth(null)
     try {
       const res = await axios.get(`${API_URL}/predict/from-file`)
       setProbability(res.data.probability)
+      setAvgPivotHeight(res.data.avg_pivot_height_pips ?? null)
+      setAvgPivotWidth(res.data.avg_pivot_width_bars ?? null)
     } catch (err) {
       setSignalError(err.response?.data?.detail || 'Błąd podczas liczenia sygnału.')
       setProbability(null)
+      setAvgPivotHeight(null)
+      setAvgPivotWidth(null)
     } finally {
       setLoadingSignal(false)
     }
@@ -481,6 +489,16 @@ function App() {
     const value = recommendationCopy === 'BUY' ? probability : 1 - probability
     return `${(value * 100).toFixed(2)}%`
   }, [probability, recommendationCopy])
+
+  const pivotHeightDisplay = useMemo(() => {
+    if (avgPivotHeight === null || avgPivotHeight === undefined) return '—'
+    return `${avgPivotHeight.toFixed(2)} pips`
+  }, [avgPivotHeight])
+
+  const pivotWidthDisplay = useMemo(() => {
+    if (avgPivotWidth === null || avgPivotWidth === undefined) return '—'
+    return `${avgPivotWidth} świec`
+  }, [avgPivotWidth])
 
   const secondsAgo = useMemo(() => {
     if (!lastFetchTime) return 0
@@ -523,6 +541,14 @@ function App() {
           <div>
             <p className="label">Sugestia</p>
             <p className={`signal-pill ${recommendationClass}`}>{recommendationCopy}</p>
+          </div>
+          <div>
+            <p className="label">Śr. wysokość pivotów</p>
+            <p className="signal-value">{pivotHeightDisplay}</p>
+          </div>
+          <div>
+            <p className="label">Śr. szerokość pivotów</p>
+            <p className="signal-value">{pivotWidthDisplay}</p>
           </div>
         </div>
         <p className="hint">

@@ -52,6 +52,8 @@ class PredictionRequest(BaseModel):
 class PredictionResponse(BaseModel):
     probability: float
     recommendation: str
+    avg_pivot_height_pips: Optional[int] = None
+    avg_pivot_width_bars: Optional[int] = None
 
 
 class SampleResponse(BaseModel):
